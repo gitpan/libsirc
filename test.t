@@ -1,7 +1,7 @@
 #!perl -w
 use strict;
 
-# $Id: test.t,v 1.1 1997-12-16 18:58:24-05 roderick Exp $
+# $Id: test.t,v 1.2 1998-10-22 18:28:23-04 roderick Exp $
 #
 # Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
 # program is free software; you can redistribute it and/or modify it
@@ -12,7 +12,9 @@ BEGIN {
     print "1..1\n";
 }
 
+use Sirc::Autoop ();
 use Sirc::Chantrack ();
+use Sirc::Kick ();
 use Sirc::Util ();
 
 sub test {

@@ -1,4 +1,4 @@
-# $Id: Chantrack.pm,v 1.6 1997-12-16 19:04:18-05 roderick Exp $
+# $Id: Chantrack.pm,v 1.7 1998-10-22 23:04:47-04 roderick Exp $
 #
 # Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
 # program is free software; you can redistribute it and/or modify it
@@ -9,6 +9,7 @@
 # XXX
 #    - disconnect doesn't run when changing servers, hook a connection
 #      message additionally?
+#    - track voice status
 
 use strict;
 
@@ -37,7 +38,7 @@ use Exporter ();
 use vars qw($VERSION @ISA @EXPORT_OK %Channel %Chan_op %Chan_user
 	    %Nick @Pend_userhost %User_chan %Userhost $Debug $Pkg);
 
-$VERSION  = do{my@r=q$Revision: 1.6 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+$VERSION  = do{my@r=q$Revision: 1.7 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
 $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
 @ISA		= qw(Exporter);
@@ -56,6 +57,7 @@ tie %User_chan	=> 'Tie::LckHash';
 
 add_hook_type '+op';
 add_hook_type '-op';
+add_hook_type 'drop-user';
 
 my $Old_w;
 BEGIN { $Old_w = $^W; $^W = 1 }
@@ -120,7 +122,9 @@ sub drop_user {
     }
     else {
 	debug "$reason drop $n";
-	for my $c (keys %{ $User_chan{$n} }) {
+	my @c = keys %{ $User_chan{$n} };
+	run_hook 'drop-user', $n, @c;
+	for my $c (@c) {
 	    delete $Chan_user{$c}{$n};
 	    delete $Chan_op{$c}{$n};
 	}
@@ -247,6 +251,7 @@ sub main::hook_chantrack_names {
     return unless $Channel{$chan};
     $list =~ s/^://;
     for my $who (split ' ', $list) {
+	my $has_voice	= ($who =~ s/^\+//);
 	my $is_op	= ($who =~ s/^\@//);
 	my $was_op	= $Chan_op{$chan}{$who};
 	if ($is_op && !$was_op) {

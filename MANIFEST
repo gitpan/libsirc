@@ -1,10 +1,12 @@
-  $Id: MANIFEST,v 1.1 1997-12-16 18:58:23-05 roderick Exp $
+  $Id: MANIFEST,v 1.2 1998-10-22 18:28:30-04 roderick Exp $
 
 Changes
 MANIFEST
 MANIFEST.SKIP
 Makefile.PL
 README
+Sirc/Autoop.pm
 Sirc/Chantrack.pm
+Sirc/Kick.pm
 Sirc/Util.pm
 test.t

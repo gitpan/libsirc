@@ -1,4 +1,4 @@
-# $Id: Makefile.PL,v 1.1 1997-12-16 18:58:22-05 roderick Exp $
+# $Id: Makefile.PL,v 1.2 1998-10-22 23:14:24-04 roderick Exp $
 #
 # Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
 # program is free software; you can redistribute it and/or modify it
@@ -9,7 +9,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     DISTNAME		=> 'libsirc',
     NAME		=> 'Sirc',
-    VERSION		=> '0.01',
+    VERSION		=> '0.02',
     dist		=> {
     	COMPRESS 	=> 'gzip --best',
     	DIST_CP		=> 'ln',

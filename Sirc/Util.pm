@@ -1,4 +1,4 @@
-# $Id: Util.pm,v 1.2 1997-12-16 19:01:37-05 roderick Exp $
+# $Id: Util.pm,v 1.3 1998-10-22 18:27:27-04 roderick Exp $
 #
 # Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
 # program is free software; you can redistribute it and/or modify it
@@ -16,6 +16,8 @@ Sirc::Util - Utility sirc functions
 
     # sirc functions
     use Sirc::Util ':sirc';
+    # overrides:
+    timer $delay, $code_string_or_ref, [$reference];
 
     # user messages
     arg_count_error $name, $want, [@arg];
@@ -41,7 +43,7 @@ Sirc::Util - Utility sirc functions
     settable_int $name, $var_ref, [$validate_ref];
 
     # hooks
-    add_hook_$type $name;
+    add_hook_type $name;
     add_hook $name, $code;
     run_hook $name, [@arg];
 
@@ -63,7 +65,10 @@ require Exporter;
 # Supply dummy definitions for testing.
 BEGIN {
     eval "
-    	sub main::addhook { }
+    	sub main::addcmd	{ }
+    	sub main::addhook	{ }
+    	sub main::addset	{ }
+    	sub main::docommand	{ }
     " unless $::version || $::version;
 }
 
@@ -71,7 +76,7 @@ BEGIN {
 # from main, so just set all the globals at compile time.
 
 BEGIN {
-    $VERSION  = do{my@r=q$Revision: 1.2 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+    $VERSION  = do{my@r=q$Revision: 1.3 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
     $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
     @ISA	= qw(Exporter);
@@ -103,6 +108,9 @@ msg newfh notice print remhook remsel resolve say sl tell timer userhost
 yetonearg
 
 =back
+
+Some of these are actually enhanced versions of the routines that B<sirc>
+provides, see below for information about them.
 
 =cut
 
@@ -137,7 +145,8 @@ BEGIN {
 #    }
 #    # XXX I don't understand why this is necessary.
 #    eval "use vars qw($list)\n"; die if $@;
-    for my $fn (grep { $_ ne 'userhost' } @{ $EXPORT_TAGS{'sirc'} }) {
+    for my $fn (grep { $_ !~ /^(timer|userhost)$/ }
+		    @{ $EXPORT_TAGS{'sirc'} }) {
 	*$fn = \&{ "main::$fn" };
     }
 }
@@ -415,6 +424,35 @@ sub plausible_nick {
     my ($n) = @_;
     #return $n =~ /^[a-z][a-z0-9\-\[\]\\\`^{}]*$/i;
     return $n =~ /^[!-~]+$/;
+}
+
+=item B<timer> @args
+
+This is an enhanced version of B<sirc>'s timer().  It allows you to use
+a code reference as the code arg.
+
+=cut
+
+#';
+
+my $timer_name = 'timersub000';
+
+sub timer {
+    my @arg = @_;
+
+    if (@arg > 1 && ref $arg[1]) {
+	# The strategy here is to give a name to the code reference
+	# and then call it via that name.  After calling it the glob
+	# containing the name is deleted to free memory.  (You can't
+	# just undef the &sub because that would leave the glob and CV
+	# in existance.)
+	no strict 'refs';
+	$timer_name++;
+	my $pkg = __PACKAGE__;
+	*{ "${pkg}::$timer_name" } = $arg[1];
+	$arg[1] = qq{${pkg}::$timer_name(); delete \$${pkg}::{"$timer_name"}};
+    }
+    return main::timer(@arg);
 }
 
 # Hack:  Chantrack overrides userhost, so I have to call through here.
