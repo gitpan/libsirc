@@ -1,0 +1,687 @@
+# $Id: Util.pm,v 1.2 1997-12-16 19:01:37-05 roderick Exp $
+#
+# Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
+# program is free software; you can redistribute it and/or modify it
+# under the same terms as Perl itself.
+
+use strict;
+
+package Sirc::Util;
+
+=head1 NAME
+
+Sirc::Util - Utility sirc functions
+
+=head1 SYNOPSIS
+
+    # sirc functions
+    use Sirc::Util ':sirc';
+
+    # user messages
+    arg_count_error $name, $want, [@arg];
+    tell_error $msg;
+    tell_question $msg;
+    xtell $msg;
+
+    # miscellaneous
+    eval_this $code, [@arg];
+    eval_verbose $name, code$, [@arg];
+    have_ops $channel;
+    have_ops_q $channel;
+    ieq $a, $b;
+    optional_channel;
+    plausible_channel $channel;
+    plausible_nick $nick;
+    xgetarg;
+    xrestrict;
+
+    # /settables
+    settable name, $var_ref, $validate_ref;
+    settable_boolean $name, $var_ref;
+    settable_int $name, $var_ref, [$validate_ref];
+
+    # hooks
+    add_hook_$type $name;
+    add_hook $name, $code;
+    run_hook $name, [@arg];
+
+=head1 DESCRIPTION
+
+This module provides a bunch of utility functions for B<sirc>.
+
+It also allows you to import from it all of the standard sirc API
+functions, so that you can more simply write your script as a module.
+
+Nothing is exported by default.
+
+=cut
+
+use vars qw($VERSION @ISA @EXPORT_OK %EXPORT_TAGS %Cmd $Debug %Hook);
+
+require Exporter;
+
+# Supply dummy definitions for testing.
+BEGIN {
+    eval "
+    	sub main::addhook { }
+    " unless $::version || $::version;
+}
+
+# I need %EXPORT_TAGS in a BEGIN to get the list of symbols to import
+# from main, so just set all the globals at compile time.
+
+BEGIN {
+    $VERSION  = do{my@r=q$Revision: 1.2 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+    $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
+
+    @ISA	= qw(Exporter);
+    @EXPORT_OK	= qw(
+		     	arg_count_error tell_error tell_question xtell
+
+			eval_this eval_verbose have_ops have_ops_q ieq
+			optional_channel plausible_channel plausible_nick
+			xgetarg xrestrict
+
+    	    	    	settable settable_boolean settable_int
+
+		     	add_hook add_hook_type run_hook
+
+		    );
+
+=head1 STANDARD SIRC FUNCTIONS
+
+You can import the standard SIRC API functions individually or, using
+the tag B<:sirc>, as a group.  The available functions are:
+
+=over
+
+=item
+
+accept addcmd addhelp addhook addset connect deltimer describe docommand
+doset dosplat dostatus eq getarg getuserline getuserpass listen load me
+msg newfh notice print remhook remsel resolve say sl tell timer userhost
+yetonearg
+
+=back
+
+=cut
+
+    %EXPORT_TAGS	= (
+	'sirc'	=> [qw(accept addcmd addhelp addhook addset
+			connect deltimer describe docommand doset dosplat
+			dostatus eq getarg getuserline getuserpass listen
+			load me msg newfh notice print remhook remsel
+			resolve say sl tell timer userhost yetonearg)],
+    );
+    Exporter::export_ok_tags;
+
+    $Debug = 0;
+}
+
+my $Old_w;
+BEGIN { $Old_w = $^W; $^W = 1 }
+
+# Import sirc's variables and functions.
+BEGIN {
+    no strict 'refs';
+# XXX
+#    my $list;
+#    for my $var (qw($args %haveops $host $newarg $nick %set $silent
+#		    $talkchannel $user $who)) {
+#	my ($type, $name) = split //, $var, 2;
+#	*$name = $type eq "\$" ? \${ "main::$name" }
+#		    : $type eq '%' ? \%{ "main::$name" }
+#		    : $type eq '@' ? \@{ "main::$name" }
+#		    : die "Unknown variable type $type";
+#	$list .= " $var";
+#    }
+#    # XXX I don't understand why this is necessary.
+#    eval "use vars qw($list)\n"; die if $@;
+    for my $fn (grep { $_ ne 'userhost' } @{ $EXPORT_TAGS{'sirc'} }) {
+	*$fn = \&{ "main::$fn" };
+    }
+}
+
+use subs qw(tell_error xtell);
+
+sub debug {
+    xtell "debug " . join '', @_
+	if $Debug;
+}
+
+#------------------------------------------------------------------------------
+
+=head1 STANDARD MESSAGE FORMS
+
+These functions provide for a few standard message forms which are shown
+to the user via main::tell().
+
+=over
+
+=item B<arg_count_error> I<name>, I<want>, [I<arg>...]
+
+This prints an error appropriate to an incorrect number of arguments.
+I<name> is the name of the invoking sub, I<want> is how many arguments
+were desired and the remaining I<arg> arguments are the arguments which
+were actually received.
+
+=cut
+
+sub arg_count_error {
+    my ($fn, $want, @got) = @_;
+    tell_error "Wrong number of args to $fn, wanted $want got "
+		. @got . " (@got)";
+}
+
+=item B<tell_error> I<msg>
+
+This formats I<msg> as an error message and passes it to main::tell.
+It's appropriate for errors caused by the system or an invalid invocation
+of your code.
+
+=cut
+
+#';
+
+sub tell_error {
+    unless (@_ == 1) {
+	arg_count_error 'error', 1, @_;
+	return;
+    }
+    main::tell("*\cbE\cb* $_[0]");
+}
+
+=item B<tell_question> I<msg>
+
+This formats I<msg> as an error message for something the user did
+wrong.  The message is passed to main::tell.
+
+=cut
+
+sub tell_question {
+    unless (@_ == 1) {
+	arg_count_error 'error', 1, @_;
+	return;
+    }
+    main::tell("*\cb?\cb* $_[0]");
+}
+
+=item B<xtell> I<msg>
+
+This is just C<main::tell "*** $msg">.
+
+=cut
+
+sub xtell {
+    my $s = shift;
+    main::tell("*** $s");
+}
+
+=back
+
+=cut
+
+#------------------------------------------------------------------------------
+
+=head1 MISCELLANEOUS FUNCTIONS
+
+These are some functions which don't fall nicely into groups like those
+following do.
+
+=over
+
+=item B<eval_this> I<code>, [I<arg>...]
+
+This B<eval>s I<code> with I<arg> as arguments.  The I<code> can be
+either a code reference or a string.  In either case the I<arg>s will be
+available in @_.  The return value is whatever the I<code> returns.
+$@ will be set if an exception was raised.
+
+=cut
+
+#';
+
+sub eval_this {
+    debug "eval_this @_";
+    unless (@_ >= 1) {
+	arg_count_error 'eval_this', '1 or more', @_;
+	return;
+    }
+    my $code = shift;
+
+    package main;
+    no strict;
+    return ref $code ? eval { $code->(@_) } : eval $code;
+}
+
+=item B<eval_verbose> I<name>, I<code>, [I<arg>...]
+
+This is like B<eval_this> except that if an exception is raised it is
+passed along to B<tell_error> (with a message indicating it's from
+B<name>).
+
+=cut
+
+#';
+
+sub eval_verbose {
+    unless (@_ >= 2) {
+	arg_count_error 'eval_verbose', '2 or more', @_;
+	return;
+    }
+    my ($what, $code, @arg) = @_;
+
+    eval_this $code, @arg;
+    if ($@) {
+	chomp $@;
+	tell_error "Error running code for $what: $@";
+	return 0;
+    }
+    return 1;
+}
+
+#sub glob_to_re {
+#    local $_ = shift;
+#    s/\\\*/\0/g;
+#    s/\\(.)/$1/sg;
+#    $_ = quotemeta $_;
+#    s/\\\*/.*/g;
+#    s/\0/\\*/g;
+#    return "^$_\$";	#";
+#}
+
+=item B<have_ops> I<channel>
+
+This function returns true if you have ops on the specified channel.  If
+you don't have ops it prints an error message and returns false.
+
+=cut
+
+#';
+
+sub have_ops {
+    unless (@_ == 1) {
+    	arg_count_error 'have_ops', 1, @_;
+    	return;
+    }
+    my ($c) = @_;
+
+    if (!$::haveops{lc $c}) {
+	tell_question "You don't have ops on $c";
+	return 0;
+    }
+    return 1;
+}
+
+=item B<have_ops_q> I<channel>
+
+This is like B<have_ops> except that no message is printed, it just
+returns true or false depending on whether you have ops on the specified
+channel.
+
+=cut
+
+sub have_ops_q {
+    unless (@_ == 1) {
+    	arg_count_error 'have_ops_q', 1, @_;
+    	return;
+    }
+    my ($c) = @_;
+
+    return $::haveops{lc $c};
+}
+
+=item B<ieq> $a, $b
+
+This sub returns true if its two args are the same, ignoring case.
+
+=cut
+
+sub ieq {
+    unless (@_ == 2) {
+    	arg_count_error 'ieq', 2, @_;
+    	return;
+    }
+    return lc($_[0]) eq lc($_[1]);
+}
+
+=item B<optional_channel>
+
+This sub examines $::args to see if the first word in it looks like a
+channel.  If it doesn't then $::talkchannel is inserted there.  If there
+was no channel present and you're not on a channel then an error message
+is printed and false is returned, otherwise true is returned.
+
+Here's a replacement for /names which runs /names for your current
+channel if you don't provide any args.
+
+    sub main::cmd_names {
+	optional_channel or return;
+	docommand "/names $::args";
+    }
+    addcmd 'names';
+
+=cut
+
+sub optional_channel {
+    unless (@_ == 0) {
+    	arg_count_error 'optional_channel', 0, @_;
+    	$::args = "#invalid-optional_channel-invocation $::args";
+    	return;
+    }
+    my $ret = 1;
+    if ($::args !~ /^[\#&]/) {
+	if (!$::talkchannel) {
+	    tell_question "Not on a channel";
+	    $ret = 0;
+	}
+	$::args = ($::talkchannel || '#not-on-a-channel') . " $::args";
+    }
+    return $ret;
+}
+
+=item B<plausible_channel> I<channel>
+
+This returns true if I<channel> is syntactically valid as a channel
+name.
+
+=cut
+
+sub plausible_channel {
+    unless (@_ == 1) {
+	arg_count_error 'plausible_channel', 1, @_;
+	return;
+    }
+    my ($c) = @_;
+    return $c =~ /^[\#&][^ \a\0\012\015,]+$/;
+}
+
+=item B<plausible_nick> I<nick>
+
+This returns true if I<nick> is syntactically valid as a nick name.
+Originally I used the RFC 1459 definition here, but that turns out to be
+no longer valid.  I don't know what definition modern IRC servers are
+using.  This sub allows characters in the range [!-~].
+
+=cut
+
+#';
+
+sub plausible_nick {
+    unless (@_ == 1) {
+	arg_count_error 'plausible_nick', 1, @_;
+	return;
+    }
+    my ($n) = @_;
+    #return $n =~ /^[a-z][a-z0-9\-\[\]\\\`^{}]*$/i;
+    return $n =~ /^[!-~]+$/;
+}
+
+# Hack:  Chantrack overrides userhost, so I have to call through here.
+# If I assign to *userhost at compile time I'll retain a reference to
+# the original sub.
+
+sub userhost {
+    goto &main::userhost;
+}
+
+=item B<xgetarg>
+
+This is like main::getarg, but it returns the new argument (in addition
+to setting $::newarg).
+
+=cut
+
+sub xgetarg {
+    getarg;
+    return $::newarg;
+}
+
+=item B<xrestrict>
+
+This just returns $::restrict.
+
+=cut
+
+sub xrestrict {
+    return $::restrict;
+}
+
+=back
+
+=cut
+
+#------------------------------------------------------------------------------
+
+=head1 /SET COMMANDS
+
+These commands provide a simplified interface to adding /set variables.
+
+=over
+
+=item B<settable> I<name>, I<var-ref>, I<validate-ref>
+
+This sub adds a user-settable option.  I<name> is its name, I<var-ref>
+is a reference to the place it will be stored, and I<validate-ref> is a
+reference to code to validate and save new values.  The code will be
+called as C<$rvalidate->($rvar, $name, $value)>.  $name will be in upper
+case.  The code needs to set both $$rvar and $::set{$name}.  (The values
+in %set are user-visible.)
+
+=cut
+
+sub settable {
+    my ($name, $rvar, $rvalidate) = @_;
+    my $subname = "main::set_$name";
+    my $uname = uc $name;
+    my $closure = sub {
+	my $val = shift;
+	$rvalidate->($rvar, $uname, $val);
+    };
+    {
+	no strict 'refs';
+	*$subname = $closure;
+    }
+    # XXX 2nd arg is ignored
+    addset $name, $name;
+}
+
+=item B<settable_boolean> I<name>, I<var-ref>
+
+This adds a /settable boolean called I<name>.  I<var-ref> is a reference
+to the scalar which will store the value.
+
+=cut
+
+sub settable_boolean {
+    my ($name, $rvar) = @_;
+    my $closure = sub {
+	my ($rvar, $name, $val) = @_;
+	my $lval = lc $val;
+	if ($lval eq 'on') {
+	    $$rvar = 1;
+	}
+	elsif ($lval eq 'off') {
+	    $$rvar = 0;
+	}
+	elsif ($lval eq 'toggle') {
+	    $$rvar = !$$rvar;
+	}
+	elsif ($lval eq 'nil') {
+	    # do nothing, for initial set
+	}
+	else {
+	    tell_question "Invalid value `$val' for $name";
+	}
+	$::set{$name} = $$rvar ? 'on' : 'off';
+    };
+    settable $name, $rvar, $closure;
+    $::set{uc $name} = $$rvar ? 'on' : 'off';
+}
+
+=item B<settable_int> I<name>, I<var-ref>, [I<validate-ref>]
+
+This function adds a /settable integer called I<name> I<var-ref> is a
+reference to the scalar which will store the value.
+
+I<validate-ref>, if provided, will be called to validate the a new
+value is legal.  It will receive both the I<name> and the new value as
+arguments.  Before it is called the new value will have been vetted for
+number-hood.  It should return a boolean to indicate whether the value
+is okay.
+
+=cut
+
+sub settable_int {
+    my ($name, $rvar, $rvalidate) = @_;
+    my $closure = sub {
+	my ($rvar, $name, $val) = @_;
+	if ($val !~ /^-?\d+$/ || ($rvalidate && !$rvalidate->($name, $val))) {
+	    tell_question "Invalid value `$val' for $name";
+	}
+	else {
+	    $$rvar = $::set{$name} = $val;
+	}
+    };
+    settable $name, $rvar, $closure;
+    $::set{uc $name} = $$rvar;
+}
+
+=back
+
+=cut
+
+#------------------------------------------------------------------------------
+
+#=head1 CHAINED COMMANDS
+#
+#=over
+#
+#=cut
+#
+#sub chain_cmd_runner {
+#    my $type = shift;
+#    for my $code (@{ $Cmd{$type} }) {
+#	if (ref $code) {
+#	    eval { &$code };
+#	}
+#	else {
+#	    eval $code;
+#	}
+#	die if $@;
+#    }
+#}
+#
+#sub chain_cmd {
+#    my ($type, $new) = @_;
+#    $type = lc $type;
+#    my $old = $main::cmds{$type};
+#    my $cmd = "chain_cmd_runner '$type'";
+#    if ($old && $old ne $cmd) {
+#	push @{ $Cmd{$type} }, $old;
+#	$main::cmds{$type} = $cmd;
+#    }
+#    push @{ $Cmd{$type} }, $new;
+#}
+#
+#=back
+#
+#=cut
+
+#------------------------------------------------------------------------------
+
+=head1 HOOKS
+
+Sirc::Util provides functionality for creating, adding code to and
+running hooks.
+
+=over
+
+=item B<add_hook_type> I<name>
+
+This creates a new hook called I<name>.
+
+=cut
+
+sub add_hook_type {
+    unless (@_ == 1) {
+	arg_count_error 'add_hook_type', 1, @_;
+	return;
+    }
+    my ($hook) = @_;
+
+    if (exists $Hook{$hook}) {
+	tell_error "add_hook_type: Hook $hook already exists";
+	return;
+    }
+    $Hook{$hook} = [];
+}
+
+
+=item B<add_hook> I<name>, I<code>
+
+Add I<code> to the I<name> hook.  The I<name> must already have been
+created with add_hook_type().  The I<code> can be either a string or a
+code reference.
+
+=cut
+
+sub add_hook {
+    unless (@_ == 2) {
+	arg_count_error 'add_hook', 2, @_;
+	return;
+    }
+    my ($hook, $code) = @_;
+
+    if (!exists $Hook{$hook}) {
+	tell_error "add_hook: Invalid hook `$hook'";
+	return;
+    }
+    push @{ $Hook{$hook} }, $code;
+}
+
+=item B<run_hook> I<name>, [I<arg>...]
+
+Run the I<name> hook, passing the I<arg>s to each hook member via @_.
+
+=cut
+
+sub run_hook {
+    unless (@_ >= 1) {
+	arg_count_error 'run_hook', '1 or more', @_;
+	return;
+    }
+    my ($hook, @arg) = @_;
+
+    if (!exists $Hook{$hook}) {
+	tell_error "run_hook: Invalid hook `$hook'";
+	return;
+    }
+    for my $code (@{ $Hook{$hook} }) {
+	eval_verbose "$hook hook", $code, @arg;
+    }
+}
+
+=back
+
+=cut
+
+#------------------------------------------------------------------------------
+
+BEGIN { $^W = $Old_w }
+
+1;
+
+=head1 AVAILABILITY
+
+Check CPAN or http://www.argon.org/~roderick/ for the latest version.
+
+=head1 AUTHOR
+
+Roderick Schertler <F<roderick@argon.org>>
+
+=head1 SEE ALSO
+
+sirc(1), perl(1), Sirc::Chantrack(3pm).
+
+=cut
