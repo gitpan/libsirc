@@ -1,4 +1,4 @@
-# $Id: Chantrack.pm,v 1.7 1998-10-22 23:04:47-04 roderick Exp $
+# $Id: Chantrack.pm,v 1.8 1998-11-27 11:55:32-05 roderick Exp $
 #
 # Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
 # program is free software; you can redistribute it and/or modify it
@@ -35,14 +35,14 @@ use Sirc::Util qw(add_hook_type addhook arg_count_error eval_verbose ieq
 		    plausible_nick run_hook sl tell_error tell_question xtell);
 use Exporter ();
 
-use vars qw($VERSION @ISA @EXPORT_OK %Channel %Chan_op %Chan_user
+use vars qw($VERSION @ISA @EXPORT_OK %Channel %Chan_op %Chan_user %Chan_voice
 	    %Nick @Pend_userhost %User_chan %Userhost $Debug $Pkg);
 
-$VERSION  = do{my@r=q$Revision: 1.7 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+$VERSION  = do{my@r=q$Revision: 1.8 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
 $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
 @ISA		= qw(Exporter);
-@EXPORT_OK	= qw(%Channel %Chan_op %Chan_user %Nick %User_chan
+@EXPORT_OK	= qw(%Channel %Chan_op %Chan_user %Chan_voice %Nick %User_chan
 			chantrack_check chantrack_show);
 
 $Debug		= 0;
@@ -51,12 +51,15 @@ $Pkg		= __PACKAGE__;
 tie %Channel	=> 'Tie::LckHash';
 tie %Chan_op	=> 'Tie::LckHash';
 tie %Chan_user	=> 'Tie::LckHash';
+tie %Chan_voice	=> 'Tie::LckHash';
 tie %Nick	=> 'Tie::LckHash';
 tie %Userhost	=> 'Tie::LckHash';
 tie %User_chan	=> 'Tie::LckHash';
 
 add_hook_type '+op';
 add_hook_type '-op';
+add_hook_type '+voice';
+add_hook_type '-voice';
 add_hook_type 'drop-user';
 
 my $Old_w;
@@ -77,17 +80,18 @@ sub userhost_split {
 }
 
 sub add_user_channel {
-    unless (@_ == 5) {
-	arg_count_error 'add_user_channel', 5, @_;
+    unless (@_ == 4) {
+	arg_count_error 'add_user_channel', 4, @_;
 	return;
     }
-    my ($reason, $n, $c, $uh, $op) = @_;
+    my ($reason, $n, $c, $uh) = @_;
 
     debug "$reason add $n to $c uh $uh";
     if (ieq $n, $::nick) {
 	$Channel{$c} = 1;
 	tie %{ $Chan_user{$c} }, 'Tie::LckHash';
 	tie %{ $Chan_op{$c} }, 'Tie::LckHash';
+	tie %{ $Chan_voice{$c} }, 'Tie::LckHash';
     }
     if (!exists $Nick{$n}) {
 	$Nick{$n} = $n;
@@ -96,16 +100,7 @@ sub add_user_channel {
     $Userhost{$n} = [userhost_split $uh]
 	if defined $uh;
     $Chan_user{$c}{$n} = 1;
-    if (defined $op) {
-	if ($op && !exists $Chan_op{$c}{$n}) {
-	    $Chan_op{$c}{$n} = $op;
-	    run_hook '+op', $c, $n;
-	}
-	elsif (!$op && exists $Chan_op{$c}{$n}) {
-	    delete $Chan_op{$c}{$n};
-	    run_hook '-op', $c, $n;
-	}
-    }
+
     $User_chan{$n}{$c} = 1;
 }
 
@@ -118,7 +113,8 @@ sub drop_user {
 
     if (ieq $n, $::nick) {
 	debug "$reason drop everything";
-	%Channel = %Chan_user = %Chan_op = %Nick = %Userhost = %User_chan = ();
+	%Channel = %Chan_user = %Chan_op = %Chan_voice
+	    = %Nick = %Userhost = %User_chan = ();
     }
     else {
 	debug "$reason drop $n";
@@ -127,6 +123,7 @@ sub drop_user {
 	for my $c (@c) {
 	    delete $Chan_user{$c}{$n};
 	    delete $Chan_op{$c}{$n};
+	    delete $Chan_voice{$c}{$n};
 	}
 	delete $Nick{$n};
 	delete $Userhost{$n};
@@ -143,6 +140,7 @@ sub drop_user_channel {
 
     delete $Chan_user{$c}{$n};
     delete $Chan_op{$c}{$n};
+    delete $Chan_voice{$c}{$n};
     delete $User_chan{$n}{$c};
     # XXX bug, scalar tied hash is always 0
     if (!keys %{ $User_chan{$n} }) {
@@ -164,13 +162,14 @@ sub drop_user_channel {
 	delete $Channel{$c};
 	delete $Chan_user{$c};
 	delete $Chan_op{$c};
+	delete $Chan_voice{$c};
     }
 }
 
 sub main::hook_chantrack_join {
     my ($c) = @_;
     my $uh = "$::user\@$::host";
-    add_user_channel 'join', $::who, $c, $uh, 0;
+    add_user_channel 'join', $::who, $c, $uh;
 }
 addhook 'join', 'chantrack_join';
 
@@ -209,6 +208,10 @@ sub main::hook_chantrack_nick {
 	    debug "op rename $::who -> $new_nick on $c";
 	    $Chan_op{$c}{$new_nick} = delete $Chan_op{$c}{$::who};
 	}
+	if (exists $Chan_voice{$c}{$::who}) {
+	    debug "voice rename $::who -> $new_nick on $c";
+	    $Chan_voice{$c}{$new_nick} = delete $Chan_voice{$c}{$::who};
+	}
     }
 }
 addhook 'nick', 'chantrack_nick';
@@ -229,6 +232,7 @@ sub main::hook_chantrack_mode {
 	my $arg = ($type =~ /[bklov]/ ? shift(@arg) : '');
 
 	debug "mode $char$type arg $arg";
+
 	if ($type eq 'o') {
 	    if ($add && !$Chan_op{$chan}{$arg}) {
 		debug "mode op add $arg on $chan";
@@ -241,9 +245,59 @@ sub main::hook_chantrack_mode {
 		run_hook '-op', $chan, $arg;
 	    }
 	}
+
+	elsif ($type eq 'v') {
+	    if ($add && !$Chan_voice{$chan}{$arg}) {
+		debug "mode voice add $arg on $chan";
+		$Chan_voice{$chan}{$arg} = 1;
+		run_hook '+voice', $chan, $arg;
+	    }
+	    elsif (!$add && $Chan_voice{$chan}{$arg}) {
+		debug "mode voice drop $arg on $chan";
+		delete $Chan_voice{$chan}{$arg};
+		run_hook '-voice', $chan, $arg;
+	    }
+	}
+
     }
 }
 addhook 'mode', 'chantrack_mode';
+
+sub interpret_names_flag {
+    unless (@_ == 3) {
+	arg_count_error 'interpret_names_flag', 3, @_;
+	return;
+    }
+    my ($n, $c, $flag) = @_;
+
+    if ($flag eq '@') {
+	if (!exists $Chan_op{$c}{$n}) {
+	    $Chan_op{$c}{$n} = 1;
+	    run_hook '+op', $c, $n;
+	}
+	return;
+    }
+
+    # Not an op.
+    if (exists $Chan_op{$c}{$n}) {
+	delete $Chan_op{$c}{$n};
+	run_hook '-op', $c, $n;
+    }
+
+    if ($flag eq '+') {
+	if (!exists $Chan_voice{$c}{$n}) {
+	    $Chan_voice{$c}{$n} = 1;
+	    run_hook '+voice', $c, $n;
+	}
+	return;
+    }
+
+    # No voice.
+    if (exists $Chan_voice{$c}{$n}) {
+	delete $Chan_voice{$c}{$n};
+	run_hook '-voice', $c, $n;
+    }
+}
 
 sub main::hook_chantrack_names {
     my ($rest) = @_;
@@ -251,22 +305,11 @@ sub main::hook_chantrack_names {
     return unless $Channel{$chan};
     $list =~ s/^://;
     for my $who (split ' ', $list) {
-	my $has_voice	= ($who =~ s/^\+//);
-	my $is_op	= ($who =~ s/^\@//);
-	my $was_op	= $Chan_op{$chan}{$who};
-	if ($is_op && !$was_op) {
-	    debug "names op add $who on $chan";
-	    $Chan_op{$chan}{$who} = 1;
-	    run_hook '+op', $chan, $who;
-	}
-	elsif (!$is_op && $was_op) {
-	    debug "names op drop $who on $chan";
-	    delete $Chan_op{$chan}{$who};
-	    run_hook '-op', $chan, $who;
-	}
+	my $flag = ($who =~ s/^([+@])//) ? $1 : '';
 	if (!exists $Chan_user{$chan}{$who}) {
-	    add_user_channel 'names', $who, $chan, undef, $is_op;
+	    add_user_channel 'names', $who, $chan, undef;
 	}
+	interpret_names_flag $who, $chan, $flag;
     }
 }
 addhook '353', 'chantrack_names';
@@ -374,7 +417,8 @@ sub chantrack_show {
 	xtell "Channel $chan:";
 	for my $user (sort keys %{ $Chan_user{$chan} }) {
 	    xtell sprintf '    %-12s %s',
-		    ($Chan_op{$chan}{$user} ? '@' : '') . $Nick{$user},
+		    ($Chan_op{$chan}{$user} ? '@'
+			: $Chan_voice{$chan}{$user} ? '+' : '') . $Nick{$user},
 		    join '@', @{ $Userhost{$user} };
 	}
     }
@@ -384,7 +428,7 @@ sub chantrack_check {
     my (@d, %d);
 
     @d = ();
-    for (qw(Channel Chan_op Chan_user)) {
+    for (qw(Channel Chan_op Chan_user Chan_voice)) {
 	push @d, [$_, join ' ', sort do { no strict 'refs'; keys %{ $_ } }];
     }
     while (@d > 1) {
@@ -396,7 +440,7 @@ sub chantrack_check {
 
     require Data::Dumper;
     my (@n, @v);
-    @n = qw(Channel Chan_op Chan_user Nick Userhost User_chan);
+    @n = qw(Channel Chan_op Chan_user Chan_voice Nick Userhost User_chan);
     for (@n) {
 	no strict 'refs';
 	push @v, \%$_;
@@ -421,6 +465,7 @@ Sirc::Chantrack - Track information about the channels you're on
     # These only work for channels you are on:
     $Chan_user{$chan}{$who}	# true if $who is on $channel
     $Chan_op{$chan}{$who}	# true if $who is an op on $channel
+    $Chan_voice{$chan}{$who}	# true if $who has a voice op on $channel
 
     # These only work for nicks which are on at least one of
     # the channels you are on:
@@ -435,6 +480,8 @@ Sirc::Chantrack - Track information about the channels you're on
     # Sirc::Util-style hooks:
     +op		gets ($channel, $nick), $who is originator
     -op		ditto
+    +voice	gets ($channel, $nick), $who is originator
+    -voice	ditto
 
 =head1 DESCRIPTION
 
@@ -472,6 +519,14 @@ keys stacked in the opposite order.
 This hash of hashes only contains elements for the operators of the
 given channels.  The values are always B<1>.
 
+=item B<$Chan_voice{I<channel>}{I<nick>}>
+
+This hash of hashes only contains elements for the people on the channel
+who have voices.  Due to the way /NAMES works, though, it can lack people
+who were +o when you showed up and got +v before you showed up (even if
+they subsequenty lose the +o).  (It syncs from C</names> and C</mode>.)
+Note that ops can speak without voices.  The values are always B<1>.
+
 =item B<$Nick{I<nick>}>
 
 This hash maps from any case of I<nick> to the proper case.
@@ -492,12 +547,12 @@ on a channel:
 	autoop_try $c, "$who!$user\@$host";
     };
 
-=item B<+op> and B<-op> hooks
+=item B<+op>, B<-op>, B<+voice>, and B<-voice> hooks
 
 These are B<Sirc::Util>-style hooks which are called when people gain
-and lose ops.  They are only called for people who are still in the
-channel after the gain/loss.  That is, an operator leaving the channel
-does not trigger the B<-op> hook.
+and lose ops and voices.  They are only called for people who are still
+in the channel after the gain/loss.  That is, an operator leaving the
+channel does not trigger the B<-op> hook.
 
 The hooks are called with the channel as the first arg and the nick as
 the second.  The originator is in $::who.  Eg, here's a trigger which
