@@ -1,7 +1,7 @@
 #!perl -w
 use strict;
 
-# $Id: test.t,v 1.2 1998-10-22 18:28:23-04 roderick Exp $
+# $Id: test.t,v 1.4 1999-01-08 18:05:40-05 roderick Exp $
 #
 # Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
 # program is free software; you can redistribute it and/or modify it
@@ -9,13 +9,14 @@ use strict;
 
 BEGIN {
     $| = 1;
-    print "1..1\n";
+    print "1..7\n";
 }
 
 use Sirc::Autoop ();
 use Sirc::Chantrack ();
 use Sirc::Kick ();
-use Sirc::Util ();
+use Sirc::LckHash ();
+use Sirc::Util;
 
 sub test {
     my ($n, $result, @info) = @_;
@@ -29,3 +30,17 @@ sub test {
 }
 
 test 1, 1;
+
+sub test_mask {
+    my ($n, $in, $out) = @_;
+    $out = "(?is)^$out\$";
+    my $real = Sirc::Util::mask_to_re $in;
+    test $n, $out eq $real, "mask_to_re($in) eq $real, expected $out";
+}
+
+test_mask 2, '', '';
+test_mask 3, 'a', 'a';
+test_mask 4, '+', '\\+';
+test_mask 5, '*', '.*';
+test_mask 6, '?', '.';
+test_mask 7, '*!foo@*.bar.com', '.*\\!foo\\@.*\\.bar\\.com';

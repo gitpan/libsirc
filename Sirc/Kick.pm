@@ -1,4 +1,4 @@
-# $Id: Kick.pm,v 1.1 1998-10-22 23:10:02-04 roderick Exp $
+# $Id: Kick.pm,v 1.3 1999-05-03 22:30:39-04 roderick Exp $
 #
 # Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
 # program is free software; you can redistribute it and/or modify it
@@ -10,15 +10,16 @@ package Sirc::Kick;
 
 use Exporter		();
 use Sirc::Chantrack	qw(%Chan_op);
-use Sirc::Util		qw(addcmd arg_count_error docommand have_ops
-			    optional_channel timer userhost xtell);
+use Sirc::Util		qw(addcmd arg_count_error ban_pattern docommand
+			    have_ops optional_channel timer userhost xtell);
 
 use vars qw($VERSION @ISA @EXPORT_OK $Debug);
 
 BEGIN {
-    $VERSION  = do{my@r=q$Revision: 1.1 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+    $VERSION  = do{my@r=q$Revision: 1.3 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
     $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
+    # ban_pattern() is exportable because it used to live here.
     @ISA		= qw(Exporter);
     @EXPORT_OK		= qw(ban_pattern kb kbtmp);
     $Debug		= 0;
@@ -27,27 +28,6 @@ BEGIN {
 sub debug {
     xtell 'kick debug ' . join '', @_
 	if $Debug;
-}
-
-sub ban_pattern {
-    debug "ban_pattern @_";
-    my ($n, $u, $h) = @_;
-
-    $n = '*';
-    $u =~ s/^~.*/*/;
-    # 1.2.3.4 => 1.2.3.*
-    if ($h =~ /^(\d+\.\d+\.\d+)\.\d+$/) {
-	$h = "$1.*";
-    }
-    # foo.bar.baz => *.bar.baz
-    elsif ($h =~ /^[^.]+\.(.+\..+)$/) {
-    	$h = "*.$1";
-    }
-    # foo.bar => *foo.bar
-    elsif ($h =~ /^[^.]+\.[^.]+$/) {
-	$h = "*$h";
-    }
-    return "$n!$u\@$h";
 }
 
 sub kb {
@@ -76,7 +56,7 @@ sub main::cmd_kb {
 }
 addcmd 'kb';
 
-# kbtmp channel, nick, reason
+# kbtmp channel nick reason
 
 sub kbtmp {
     debug "kbtmp @_";

@@ -1,4 +1,4 @@
-# $Id: Util.pm,v 1.3 1998-10-22 18:27:27-04 roderick Exp $
+# $Id: Util.pm,v 1.9 1999-05-25 11:10:02-04 roderick Exp $
 #
 # Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
 # program is free software; you can redistribute it and/or modify it
@@ -26,11 +26,13 @@ Sirc::Util - Utility sirc functions
     xtell $msg;
 
     # miscellaneous
+    $pattern = ban_pattern $nick, $user, $host;
     eval_this $code, [@arg];
     eval_verbose $name, code$, [@arg];
     have_ops $channel;
     have_ops_q $channel;
     ieq $a, $b;
+    $re = mask_to_re $mask;
     optional_channel;
     plausible_channel $channel;
     plausible_nick $nick;
@@ -60,7 +62,7 @@ Nothing is exported by default.
 
 use vars qw($VERSION @ISA @EXPORT_OK %EXPORT_TAGS %Cmd $Debug %Hook);
 
-require Exporter;
+use Exporter ();
 
 # Supply dummy definitions for testing.
 BEGIN {
@@ -76,16 +78,25 @@ BEGIN {
 # from main, so just set all the globals at compile time.
 
 BEGIN {
-    $VERSION  = do{my@r=q$Revision: 1.3 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+    # This first line is for MakeMaker, it extracts the version for the
+    # whole distribution from here.
+    $VERSION = '0.09';
+    $VERSION .= '-l' if 0;
+    $::add_ons .= "+libsirc $VERSION"
+	if !defined $::add_ons || $::add_ons !~ /\blibsirc\b/;
+
+    # This is the real version for this file.
+    $VERSION  = do{my@r=q$Revision: 1.9 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
     $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
     @ISA	= qw(Exporter);
     @EXPORT_OK	= qw(
 		     	arg_count_error tell_error tell_question xtell
 
-			eval_this eval_verbose have_ops have_ops_q ieq
-			optional_channel plausible_channel plausible_nick
-			xgetarg xrestrict
+			ban_pattern eval_this eval_verbose have_ops
+			have_ops_q ieq mask_to_re optional_channel
+			plausible_channel plausible_nick xgetarg
+			xrestrict
 
     	    	    	settable settable_boolean settable_int
 
@@ -239,6 +250,52 @@ following do.
 
 =over
 
+=item B<ban_pattern> I<nick>, I<user>, I<host>
+
+This returns a pattern suitable for banning the given nick, user and host.
+
+The current implementation is this:  Any nick is always matched.  If the
+user has a ~ at the start (that is, it didn't come from identd) all user
+names are matched, else just the one given matches.  If the host is an
+IP address, it bans a class C sized chunk of IP space, otherwise
+part of it is wildcarded (how much depends on how many parts it has).
+
+For example:
+
+    qw(Nick  user 1.2.3.4)		*!user@1.2.3.*
+    qw(Nick ~user 1.2.3.4)		*!*@1.2.3.*
+    qw(Nick  user host.foo.com)		*!user@*.foo.com
+    qw(Nick ~user host.foo.com)		*!*@*.foo.com
+    qw(Nick  user foo.com)		*!user@*foo.com
+    qw(Nick ~user foo.com)		*!*@*foo.com
+
+=cut
+
+sub ban_pattern {
+    debug "ban_pattern @_";
+    unless (@_ == 3) {
+    	arg_count_error 'ban_pattern', 1, @_;
+    	return;
+    }
+    my ($n, $u, $h) = @_;
+
+    $n = '*';
+    $u =~ s/^~.*/*/;
+    # 1.2.3.4 => 1.2.3.*
+    if ($h =~ /^(\d+\.\d+\.\d+)\.\d+$/) {
+	$h = "$1.*";
+    }
+    # foo.bar.baz => *.bar.baz
+    elsif ($h =~ /^[^.]+\.(.+\..+)$/) {
+    	$h = "*.$1";
+    }
+    # foo.bar => *foo.bar
+    elsif ($h =~ /^[^.]+\.[^.]+$/) {
+	$h = "*$h";
+    }
+    return "$n!$u\@$h";
+}
+
 =item B<eval_this> I<code>, [I<arg>...]
 
 This B<eval>s I<code> with I<arg> as arguments.  The I<code> can be
@@ -289,16 +346,6 @@ sub eval_verbose {
     return 1;
 }
 
-#sub glob_to_re {
-#    local $_ = shift;
-#    s/\\\*/\0/g;
-#    s/\\(.)/$1/sg;
-#    $_ = quotemeta $_;
-#    s/\\\*/.*/g;
-#    s/\0/\\*/g;
-#    return "^$_\$";	#";
-#}
-
 =item B<have_ops> I<channel>
 
 This function returns true if you have ops on the specified channel.  If
@@ -342,7 +389,7 @@ sub have_ops_q {
 
 =item B<ieq> $a, $b
 
-This sub returns true if its two args are the same, ignoring case.
+This sub returns true if its two args are eq, ignoring case.
 
 =cut
 
@@ -352,6 +399,29 @@ sub ieq {
     	return;
     }
     return lc($_[0]) eq lc($_[1]);
+}
+
+=item B<mask_to_re> I<glob>
+
+Convert the given "mask" (an IRC-style glob pattern) to a regular
+expression.  The only special characters in IRC masks are C<*> and
+C<?> (there's no way to escape one of these).  The returned pattern
+always matches case insensitively and is anchored at the front and
+back (as IRC does it).
+
+=cut
+
+sub mask_to_re {
+    unless (@_ == 1) {
+    	arg_count_error 'mask_to_re', 1, @_;
+    	return;
+    }
+    my ($s) = @_;
+
+    $s = quotemeta $s;
+    $s =~ s/\\\*/.*/g;
+    $s =~ s/\\\?/./g;
+    return "(?is)^$s\$";
 }
 
 =item B<optional_channel>
@@ -559,7 +629,7 @@ sub settable_boolean {
 
 =item B<settable_int> I<name>, I<var-ref>, [I<validate-ref>]
 
-This function adds a /settable integer called I<name> I<var-ref> is a
+This function adds a /settable integer called I<name>.  I<var-ref> is a
 reference to the scalar which will store the value.
 
 I<validate-ref>, if provided, will be called to validate the a new
@@ -582,6 +652,7 @@ sub settable_int {
 	}
     };
     settable $name, $rvar, $closure;
+    $$rvar ||= 0;	# must be defined for /set to work
     $::set{uc $name} = $$rvar;
 }
 

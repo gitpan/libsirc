@@ -1,4 +1,4 @@
-# $Id: Chantrack.pm,v 1.8 1998-11-27 11:55:32-05 roderick Exp $
+# $Id: Chantrack.pm,v 1.10 1999-05-25 11:07:55-04 roderick Exp $
 #
 # Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
 # program is free software; you can redistribute it and/or modify it
@@ -10,27 +10,13 @@
 #    - disconnect doesn't run when changing servers, hook a connection
 #      message additionally?
 #    - track voice status
+#    - sirc still outputs a message for users not on irc (code 401)
 
 use strict;
 
-# Lck == lower case key.  Hashes tied to this package will always use
-# lower case keys.
-
-package Tie::LckHash;
-
-use vars qw(@ISA);
-
-require Tie::Hash;
-
-@ISA = qw(Tie::StdHash);
-
-sub STORE	{ $_[0]->{lc $_[1]} = $_[2] }
-sub FETCH	{ $_[0]->{lc $_[1]} }
-sub EXISTS	{ exists $_[0]->{lc $_[1]} }
-sub DELETE	{ delete $_[0]->{lc $_[1]} }
-
 package Sirc::Chantrack;
 
+use Sirc::LckHash ();
 use Sirc::Util qw(add_hook_type addhook arg_count_error eval_verbose ieq
 		    plausible_nick run_hook sl tell_error tell_question xtell);
 use Exporter ();
@@ -38,7 +24,7 @@ use Exporter ();
 use vars qw($VERSION @ISA @EXPORT_OK %Channel %Chan_op %Chan_user %Chan_voice
 	    %Nick @Pend_userhost %User_chan %Userhost $Debug $Pkg);
 
-$VERSION  = do{my@r=q$Revision: 1.8 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+$VERSION  = do{my@r=q$Revision: 1.10 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
 $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
 @ISA		= qw(Exporter);
@@ -48,13 +34,13 @@ $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 $Debug		= 0;
 $Pkg		= __PACKAGE__;
 
-tie %Channel	=> 'Tie::LckHash';
-tie %Chan_op	=> 'Tie::LckHash';
-tie %Chan_user	=> 'Tie::LckHash';
-tie %Chan_voice	=> 'Tie::LckHash';
-tie %Nick	=> 'Tie::LckHash';
-tie %Userhost	=> 'Tie::LckHash';
-tie %User_chan	=> 'Tie::LckHash';
+tie %Channel	=> 'Sirc::LckHash';
+tie %Chan_op	=> 'Sirc::LckHash';
+tie %Chan_user	=> 'Sirc::LckHash';
+tie %Chan_voice	=> 'Sirc::LckHash';
+tie %Nick	=> 'Sirc::LckHash';
+tie %Userhost	=> 'Sirc::LckHash';
+tie %User_chan	=> 'Sirc::LckHash';
 
 add_hook_type '+op';
 add_hook_type '-op';
@@ -89,13 +75,13 @@ sub add_user_channel {
     debug "$reason add $n to $c uh $uh";
     if (ieq $n, $::nick) {
 	$Channel{$c} = 1;
-	tie %{ $Chan_user{$c} }, 'Tie::LckHash';
-	tie %{ $Chan_op{$c} }, 'Tie::LckHash';
-	tie %{ $Chan_voice{$c} }, 'Tie::LckHash';
+	tie %{ $Chan_user{$c} }, 'Sirc::LckHash';
+	tie %{ $Chan_op{$c} }, 'Sirc::LckHash';
+	tie %{ $Chan_voice{$c} }, 'Sirc::LckHash';
     }
     if (!exists $Nick{$n}) {
 	$Nick{$n} = $n;
-	tie %{ $User_chan{$n} }, 'Tie::LckHash';
+	tie %{ $User_chan{$n} }, 'Sirc::LckHash';
     }
     $Userhost{$n} = [userhost_split $uh]
 	if defined $uh;
@@ -450,7 +436,7 @@ sub chantrack_check {
 
 BEGIN { $^W = $Old_w }
 
-1
+1;
 
 __END__
 

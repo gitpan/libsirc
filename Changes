@@ -1,5 +1,52 @@
 Revision history for the libsirc distribution.
 
+0.09
+
+    - Add missing '1' to the end of Autoop.pm.  It was working by
+      happenstance in real life but not when run from 'make test' (due
+      to the dummy addhook()).
+
+0.08  Tue May 18 22:39:27 EDT 1999
+
+    - Allow ops to control your autovoice_delay by sending you specially
+      formatted /msgs.
+
+0.07  Mon May 03 23:28:27 EDT 1999
+
+    - Fix Sirc::Autoop's %Autovoice not to +v people who didn't have it
+      before you arrived.  Instead, they're noted as being -v.
+
+    - Have Sirc::Util::settable_int set the variable to 0 if it's undef,
+      else /set won't work on it.
+
+0.06  Fri Jan 08 18:06:52 EST 1999
+
+    - Move the version from Makefile.PL to Sirc::Util.  Use it to put
+      the library name and version in $::add_ons.
+
+    - Move ban_pattern() from Sirc::Kick to Sirc::Util.
+
+    - Add Sirc::Util::mask_to_re().
+
+    - Have Sirc::Autoop's %Autovoice work based on ban_pattern rather
+      than nick.
+
+0.05  Wed Dec 23 00:41:50 EST 1998
+
+    - Oops, Sirc::LckHash wasn't in the MANIFEST.  One should always run
+      a disttest or at least a distcheck!
+
+0.04  Wed Dec 23 00:01:35 EST 1998
+
+    - Add Sirc::LckHash, a class tied hash class which downcases the
+      keys.  This used to be in Sirc::Util as Tie::LckHash.
+
+    - Add %Autovoice to Sirc::Autoop.
+
+    - Don't allow importation Sirc::Autoop's variables which are also
+      /settable, as setting them directly (rather than via doset) causes
+      the /set output to be wrong.
+
 0.03  Fri Nov 27 11:48:45 EST 1998
 
     - Add voice capabilities to Sirc::Chantrack and Sirc::Autoop.
@@ -23,4 +70,4 @@ Revision history for the libsirc distribution.
 
     - Initial version.
 
-$Id: Changes,v 1.3 1998-11-27 11:57:43-05 roderick Exp $
+$Id: Changes,v 1.7 1999-06-18 17:55:30-04 roderick Exp $

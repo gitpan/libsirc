@@ -1,4 +1,4 @@
-  $Id: MANIFEST,v 1.2 1998-10-22 18:28:30-04 roderick Exp $
+  $Id: MANIFEST,v 1.3 1998-12-23 00:41:50-05 roderick Exp $
 
 Changes
 MANIFEST
@@ -8,5 +8,6 @@ README
 Sirc/Autoop.pm
 Sirc/Chantrack.pm
 Sirc/Kick.pm
+Sirc/LckHash.pm
 Sirc/Util.pm
 test.t
