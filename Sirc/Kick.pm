@@ -1,4 +1,4 @@
-# $Id: Kick.pm,v 1.4 2000-06-02 12:53:10-04 roderick Exp $
+# $Id: Kick.pm,v 1.5 2000-06-30 23:53:02-04 roderick Exp $
 #
 # Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
 # This program is free software; you can redistribute it and/or modify
@@ -16,7 +16,7 @@ use Sirc::Util		qw(addcmd arg_count_error ban_pattern docommand
 use vars qw($VERSION @ISA @EXPORT_OK $Debug);
 
 BEGIN {
-    $VERSION  = do{my@r=q$Revision: 1.4 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+    $VERSION  = do{my@r=q$Revision: 1.5 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
     $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
     # ban_pattern() is exportable because it used to live here.
@@ -33,7 +33,7 @@ sub debug {
 sub kb {
     debug "kb @_";
     unless (@_ == 2 || @_ == 3) {
-	arg_count_error 'kb', '2 or 3', @_;
+	arg_count_error undef, '2 or 3', @_;
 	return;
     }
     my ($channel, $n, $reason) = @_;
@@ -61,7 +61,7 @@ addcmd 'kb';
 sub kbtmp {
     debug "kbtmp @_";
     unless (@_ == 2 || @_ == 3) {
-	arg_count_error 'kbtmp', '2 or 3', @_;
+	arg_count_error undef, '2 or 3', @_;
 	return;
     }
     my ($channel, $n, $reason) = @_;

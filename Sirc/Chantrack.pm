@@ -1,4 +1,4 @@
-# $Id: Chantrack.pm,v 1.12 2000-06-02 13:17:00-04 roderick Exp $
+# $Id: Chantrack.pm,v 1.13 2000-06-30 23:52:24-04 roderick Exp $
 #
 # Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
 # This program is free software; you can redistribute it and/or modify
@@ -26,7 +26,7 @@ use vars qw($VERSION @ISA @EXPORT_OK
 	    %Channel %Chan_limit %Chan_op %Chan_user %Chan_voice
 	    %Nick @Pend_userhost %User_chan %Userhost $Debug $Pkg);
 
-$VERSION  = do{my@r=q$Revision: 1.12 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+$VERSION  = do{my@r=q$Revision: 1.13 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
 $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
 @ISA		= qw(Exporter);
@@ -63,7 +63,7 @@ sub debug {
 
 sub userhost_split {
     unless (@_ == 1) {
-	arg_count_error 'userhost_split', 1, @_;
+	arg_count_error undef, 1, @_;
 	return ();
     }
     return $_[0] =~ /^(.*?)\@(.*)/s ? ($1, $2) : ();
@@ -71,7 +71,7 @@ sub userhost_split {
 
 sub add_user_channel {
     unless (@_ == 4) {
-	arg_count_error 'add_user_channel', 4, @_;
+	arg_count_error undef, 4, @_;
 	return;
     }
     my ($reason, $n, $c, $uh) = @_;
@@ -98,7 +98,7 @@ sub add_user_channel {
 
 sub drop_user {
     unless (@_ == 2) {
-	arg_count_error 'drop_user', 2, @_;
+	arg_count_error undef, 2, @_;
 	return;
     }
     my ($reason, $n) = @_;
@@ -125,7 +125,7 @@ sub drop_user {
 
 sub drop_user_channel {
     unless (@_ == 3) {
-	arg_count_error 'drop_user_channel', 3, @_;
+	arg_count_error undef, 3, @_;
 	return;
     }
     my ($reason, $n, $c) = @_;
@@ -280,7 +280,7 @@ addhook '324', 'chantrack_324';
 
 sub interpret_names_flag {
     unless (@_ == 3) {
-	arg_count_error 'interpret_names_flag', 3, @_;
+	arg_count_error undef, 3, @_;
 	return;
     }
     my ($n, $c, $flag) = @_;
@@ -332,7 +332,7 @@ addhook '353', 'chantrack_names';
 BEGIN { undef &main::userhost }
 sub main::userhost {
     unless (@_ == 2 || @_ == 3) {
-	arg_count_error 'userhost', '2 or 3', @_;
+	arg_count_error undef, '2 or 3', @_;
 	return;
     }
     my ($n, $rhave, $rhavenot) = @_;

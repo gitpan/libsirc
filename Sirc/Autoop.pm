@@ -1,4 +1,4 @@
-# $Id: Autoop.pm,v 1.10 2000-06-02 12:52:49-04 roderick Exp $
+# $Id: Autoop.pm,v 1.11 2000-07-27 12:01:04-04 roderick Exp $
 #
 # Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
 # This program is free software; you can redistribute it and/or modify
@@ -14,15 +14,15 @@ package Sirc::Autoop;
 use Exporter		();
 use Sirc::Chantrack	qw(%Chan_op %Chan_user %Chan_voice);
 use Sirc::LckHash	();
-use Sirc::Util		qw(addcmd add_hook addhook ban_pattern docommand
-			    doset have_ops have_ops_q ieq mask_to_re
-			    notice optional_channel settable_boolean
-			    settable_int tell_question timer userhost
-			    xgetarg xtell);
+use Sirc::Util		qw(addcmd addhelp add_hook addhook ban_pattern
+			    docommand doset have_ops have_ops_q ieq
+			    mask_to_re notice optional_channel
+			    settable_boolean settable_int tell_question
+			    timer userhost xgetarg xtell);
 
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK @Autoop %Autovoice);
 
-$VERSION  = do{my@r=q$Revision: 1.10 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+$VERSION  = do{my@r=q$Revision: 1.11 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
 $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
 @ISA		= qw(Exporter);
@@ -255,6 +255,12 @@ sub main::cmd_autoop {
     };
 }
 addcmd 'autoop';
+addhelp 'autoop', '[channel]',
+q{Uses your autoop list to op and voice people on the current channel.
+Since this happens automatically you don't normally have to do this, this
+command is useful if you'd had autoopping disabled, or if there's a bug
+in the system.
+};
 
 # Try an /autoop after receiving ops.
 add_hook '+op', sub {

@@ -1,5 +1,26 @@
 Revision history for the libsirc distribution.
 
+0.12
+
+    - Sirc::URL is a new module which provides an easy way to view URLs
+      which appear on the screen.
+
+    - Sirc::Util:
+
+    	- addcmd() is an enhanced version of sirc's.  It lets you define
+    	  commands whose names contain non-alphanumeric characters.
+
+    	- addhelp() is an enhanced version of sirc's.  It both adds the
+    	  new command to the main help topic (or "set" topic), and
+    	  provides a way to add help without hardcoding the format that
+    	  help entries use.
+
+	- arg_count_error() supplies the subroutine name if it's undef.
+
+	- settable_boolean() allows you to supply a validator function.
+
+	- settable_str() is a new function, similar to settable_int().
+
 0.11  Fri Jun 02 15:38:29 EDT 2000
 
     - Tweak /limitman algorithm to try to keep the slaves a constant
@@ -85,4 +106,4 @@ Revision history for the libsirc distribution.
 
     - Initial version.
 
-$Id: Changes,v 1.9 2000-06-02 15:42:26-04 roderick Exp $
+$Id: Changes,v 1.10 2001-07-27 08:56:05-04 roderick Exp $

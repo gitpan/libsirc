@@ -1,4 +1,4 @@
-# $Id: Util.pm,v 1.12 2000-06-02 15:39:57-04 roderick Exp $
+# $Id: Util.pm,v 1.15 2001-07-27 09:06:13-04 roderick Exp $
 #
 # Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
 # This program is free software; you can redistribute it and/or modify
@@ -17,10 +17,11 @@ Sirc::Util - Utility sirc functions
     # sirc functions
     use Sirc::Util ':sirc';
     # overrides:
+    addhelp $cmd, $usage_line, $rest;
     timer $delay, $code_string_or_ref, [$reference];
 
     # user messages
-    arg_count_error $name, $want, [@arg];
+    arg_count_error undef, $want, [@arg];	# or 1st arg $name
     tell_error $msg;
     tell_question $msg;
     xtell $msg;
@@ -42,9 +43,10 @@ Sirc::Util - Utility sirc functions
     $restricted = xrestrict;
 
     # /settables
-    settable name, $var_ref, $validate_ref;
-    settable_boolean $name, $var_ref;
+    settable name, $var_ref, $setter_ref;
+    settable_boolean $name, $var_ref, [$validate_ref];
     settable_int $name, $var_ref, [$validate_ref];
+    settable_str $name, $var_ref, [$validate_ref];
 
     # hooks
     add_hook_type $name;
@@ -68,12 +70,13 @@ use Exporter ();
 
 # Supply dummy definitions for testing.
 BEGIN {
-    eval "
-    	sub main::addcmd	{ }
+    eval q{
+    	sub main::addhelp	{ }
     	sub main::addhook	{ }
     	sub main::addset	{ }
     	sub main::docommand	{ }
-    " unless $::version || $::version;
+    	sub main::tell		{ print @_, "\n" }
+    } unless $::version || $::version;
 }
 
 # I need %EXPORT_TAGS in a BEGIN to get the list of symbols to import
@@ -82,13 +85,13 @@ BEGIN {
 BEGIN {
     # This first line is for MakeMaker, it extracts the version for the
     # whole distribution from here.
-    $VERSION = '0.11';
+    $VERSION = '0.12';
     $VERSION .= '-l' if 0;
     $::add_ons .= "+libsirc $VERSION"
 	if !defined $::add_ons || $::add_ons !~ /\blibsirc\b/;
 
     # This is the real version for this file.
-    $VERSION  = do{my@r=q$Revision: 1.12 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+    $VERSION  = do{my@r=q$Revision: 1.15 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
     $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
     @ISA	= qw(Exporter);
@@ -100,7 +103,7 @@ BEGIN {
 			plausible_channel plausible_nick xgetarg
 			xrestrict
 
-    	    	    	settable settable_boolean settable_int
+    	    	    	settable settable_boolean settable_int settable_str
 
 		     	add_hook add_hook_type run_hook
 
@@ -142,23 +145,10 @@ provides, see below for information about them.
 my $Old_w;
 BEGIN { $Old_w = $^W; $^W = 1 }
 
-# Import sirc's variables and functions.
+# Import sirc's functions.
 BEGIN {
     no strict 'refs';
-# XXX
-#    my $list;
-#    for my $var (qw($args %haveops $host $newarg $nick %set $silent
-#		    $talkchannel $user $who)) {
-#	my ($type, $name) = split //, $var, 2;
-#	*$name = $type eq "\$" ? \${ "main::$name" }
-#		    : $type eq '%' ? \%{ "main::$name" }
-#		    : $type eq '@' ? \@{ "main::$name" }
-#		    : die "Unknown variable type $type";
-#	$list .= " $var";
-#    }
-#    # XXX I don't understand why this is necessary.
-#    eval "use vars qw($list)\n"; die if $@;
-    for my $fn (grep { $_ !~ /^(timer|userhost)$/ }
+    for my $fn (grep { $_ !~ /^(addcmd|addhelp|timer|userhost)$/ }
 		    @{ $EXPORT_TAGS{'sirc'} }) {
 	*$fn = \&{ "main::$fn" };
     }
@@ -183,16 +173,19 @@ to the user via main::tell().
 =item B<arg_count_error> I<name>, I<want>, [I<arg>...]
 
 This prints an error appropriate to an incorrect number of arguments.
-I<name> is the name of the invoking sub, I<want> is how many arguments
-were desired and the remaining I<arg> arguments are the arguments which
-were actually received.
+I<name> is the name to report as having been invoked incorrectly.  If
+it's C<undef> (which is the usual case) it's set to the caller's
+function name.  I<want> is how many arguments were desired and the
+remaining I<arg> arguments are the arguments which were actually
+received.
 
 =cut
 
 sub arg_count_error {
     my ($fn, $want, @got) = @_;
+    $fn = (caller 1)[3] if !defined $fn;
     tell_error "Wrong number of args to $fn, wanted $want got "
-		. @got . " (@got)";
+		. @got . ' (' . join(', ', @got) . ')';
 }
 
 =item B<tell_error> I<msg>
@@ -207,7 +200,7 @@ of your code.
 
 sub tell_error {
     unless (@_ == 1) {
-	arg_count_error 'error', 1, @_;
+	arg_count_error undef, 1, @_;
 	return;
     }
     main::tell("*\cbE\cb* $_[0]");
@@ -222,7 +215,7 @@ wrong.  The message is passed to main::tell.
 
 sub tell_question {
     unless (@_ == 1) {
-	arg_count_error 'error', 1, @_;
+	arg_count_error undef, 1, @_;
 	return;
     }
     main::tell("*\cb?\cb* $_[0]");
@@ -252,6 +245,124 @@ following do.
 
 =over
 
+=item B<addcmd> I<command>
+
+This is an enhanced version of B<sirc>'s addcmd().  It lets you define
+commands whose names contain non-alphanumeric characters.
+
+=cut
+
+sub addcmd {
+    @_ == 1 || arg_count_error undef, '1', @_;
+    my ($cmd) = @_;
+
+    (my $qcmd = $cmd) =~ s/(['\\])/\\$1/g;
+    my $ucmd = uc $cmd;
+    $::cmds{$ucmd} = "\&{'cmd_$qcmd'}();";
+    debug "command $cmd => $::cmds{$ucmd}";
+}
+
+=item B<addhelp> I<command>, I<help>
+
+=item B<addhelp> I<command>, I<usage line>, I<rest>
+
+This is an enhanced version of B<sirc>'s addhelp().  It arranges for the
+new command to appear in the master help list.
+
+Additionally, there's a new 3-arg syntax.  When called with 2 args it
+uses the regular addhelp() command.  I hate the way this makes you
+hardcode the standard form for help info, though, so I added the second
+form.  This form takes the usage info which appears after the command
+as its first arg, and the bulk of the help as its 3rd arg.
+
+=cut
+
+{ my (%seen_cmd, %seen_set);
+sub addhelp {
+    @_ == 2 || @_ == 3 || arg_count_error undef, '2 or 3', @_;
+    my $cmd = shift @_;
+    my $text = @_ == 1 ? shift : ("Usage: \cB\U$cmd\E\cB " . join "\n", @_);
+
+    my ($rseen, $seen_tag, $targ, $intro);
+    if ($cmd =~ /^set (.*)/) {
+	$rseen	= \%seen_set;
+	$seen_tag = uc $1;
+	$targ	= '@set';
+	$intro	= "List of non-builtin SET variables:";
+    }
+    else {
+	$rseen	= \%seen_cmd;
+	$seen_tag = uc $cmd;
+	$targ	= '@main';
+	$intro	= "List of non-builtin commands with help:";
+    }
+
+    if (@::help && !$rseen->{$seen_tag}++) {
+	# The help info is stored as an array of lines, then they're
+	# scanned when you use /help!  Entries are introduced with
+	# "@name".
+
+	my $state	= 0;
+	my $i		= -1;
+	my $first	= undef;
+	my $len		= 0;
+
+	for (@::help) {
+	    $i++;
+	    if ($state == 0) {
+		$state = 1 if $_ eq $targ;
+	    }
+	    elsif ($state == 1) {
+		if ($_ eq $intro) {
+		    $first = $i;
+		    $len = 1;
+		    $state = 2;
+		}
+		elsif (/^@/) {
+		    $first = $i;
+		    $len = 0;
+		    last;
+		}
+	    }
+	    elsif ($state == 2) {
+		if (/^@/) {
+		    last;
+		}
+		else {
+		    $len++;
+		}
+	    }
+	}
+
+	if (defined $first) {
+	    # I found the help entry, $first and $len are the splice()
+	    # indicators which for the part I've added to it.
+	    local $_;
+	    my @labels = sort keys %$rseen;
+	    my $l = 0;		# max label length
+	    for (@labels) {
+		$l = length if length > $l;
+	    }
+	    $l += 2;		# spaces between
+	    my $w = 80 - 4;	# XXX terminal width less wrap margin
+	    my @out = ($intro, '');
+	    while (@labels) {
+		my $this = sprintf "%-${l}s", shift @labels;
+		if (length($out[$#out]) + length($this) > $w) {
+		    push @out, '';
+		}
+		$out[$#out] .= $this;
+	    }
+	    if ($out[$#out] eq '') {
+		pop @out;
+	    }
+	    splice @::help, $first, $len, @out;
+	}
+    }
+
+    return main::addhelp $cmd, $text;
+} }
+
 =item B<ban_pattern> I<nick>, I<user>, I<host>
 
 This returns a pattern suitable for banning the given nick, user and host.
@@ -276,7 +387,7 @@ For example:
 sub ban_pattern {
     debug "ban_pattern @_";
     unless (@_ == 3) {
-    	arg_count_error 'ban_pattern', 1, @_;
+    	arg_count_error undef, 1, @_;
     	return;
     }
     my ($n, $u, $h) = @_;
@@ -309,7 +420,7 @@ what you usually want anyway.
 
 sub by_server {
     unless (@_ == 0 || @_ == 3) {
-	arg_count_error 'by_server', '0 or 3', @_;
+	arg_count_error undef, '0 or 3', @_;
 	return;
     }
     my ($n, $u, $h) = @_ ? @_ : ($::who, $::user, $::host);
@@ -331,7 +442,7 @@ $@ will be set if an exception was raised.
 sub eval_this {
     debug "eval_this @_";
     unless (@_ >= 1) {
-	arg_count_error 'eval_this', '1 or more', @_;
+	arg_count_error undef, '1 or more', @_;
 	return;
     }
     my $code = shift;
@@ -353,7 +464,7 @@ B<name>).
 
 sub eval_verbose {
     unless (@_ >= 2) {
-	arg_count_error 'eval_verbose', '2 or more', @_;
+	arg_count_error undef, '2 or more', @_;
 	return;
     }
     my ($what, $code, @arg) = @_;
@@ -376,7 +487,7 @@ you don\'t have ops it prints an error message and returns false.
 
 sub have_ops {
     unless (@_ == 1) {
-    	arg_count_error 'have_ops', 1, @_;
+    	arg_count_error undef, 1, @_;
     	return;
     }
     my ($c) = @_;
@@ -398,7 +509,7 @@ channel.
 
 sub have_ops_q {
     unless (@_ == 1) {
-    	arg_count_error 'have_ops_q', 1, @_;
+    	arg_count_error undef, 1, @_;
     	return;
     }
     my ($c) = @_;
@@ -414,7 +525,7 @@ This sub returns true if its two args are eq, ignoring case.
 
 sub ieq {
     unless (@_ == 2) {
-    	arg_count_error 'ieq', 2, @_;
+    	arg_count_error undef, 2, @_;
     	return;
     }
     return lc($_[0]) eq lc($_[1]);
@@ -432,7 +543,7 @@ back (as IRC does it).
 
 sub mask_to_re {
     unless (@_ == 1) {
-    	arg_count_error 'mask_to_re', 1, @_;
+    	arg_count_error undef, 1, @_;
     	return;
     }
     my ($s) = @_;
@@ -463,7 +574,7 @@ channel if you don't provide any args.
 
 sub optional_channel {
     unless (@_ == 0) {
-    	arg_count_error 'optional_channel', 0, @_;
+    	arg_count_error undef, 0, @_;
     	$::args = "#invalid-optional_channel-invocation $::args";
     	return;
     }
@@ -486,7 +597,7 @@ Return an unused timer number.
 
 sub newtimer {
     unless (@_ == 0) {
-	arg_count_error 'newtimer', 1, @_;
+	arg_count_error undef, 1, @_;
 	return;
     }
 
@@ -505,7 +616,7 @@ name.
 
 sub plausible_channel {
     unless (@_ == 1) {
-	arg_count_error 'plausible_channel', 1, @_;
+	arg_count_error undef, 1, @_;
 	return;
     }
     my ($c) = @_;
@@ -525,7 +636,7 @@ using.  This sub allows characters in the range [!-~].
 
 sub plausible_nick {
     unless (@_ == 1) {
-	arg_count_error 'plausible_nick', 1, @_;
+	arg_count_error undef, 1, @_;
 	return;
     }
     my ($n) = @_;
@@ -604,24 +715,24 @@ These commands provide a simplified interface to adding /set variables.
 
 =over
 
-=item B<settable> I<name>, I<var-ref>, I<validate-ref>
+=item B<settable> I<name>, I<var-ref>, I<setter-ref>
 
 This sub adds a user-settable option.  I<name> is its name, I<var-ref>
-is a reference to the place it will be stored, and I<validate-ref> is a
+is a reference to the place it will be stored, and I<setter-ref> is a
 reference to code to validate and save new values.  The code will be
-called as C<$rvalidate->($rvar, $name, $value)>.  $name will be in upper
+called as C<$rsetter->($rvar, $name, $value)>.  $name will be in upper
 case.  The code needs to set both $$rvar and $::set{$name}.  (The values
 in %set are user-visible.)
 
 =cut
 
 sub settable {
-    my ($name, $rvar, $rvalidate) = @_;
+    my ($name, $rvar, $rsetter) = @_;
     my $subname = "main::set_$name";
     my $uname = uc $name;
     my $closure = sub {
 	my $val = shift;
-	$rvalidate->($rvar, $uname, $val);
+	$rsetter->($rvar, $uname, $val);
     };
     {
 	no strict 'refs';
@@ -631,33 +742,45 @@ sub settable {
     addset $name, $name;
 }
 
-=item B<settable_boolean> I<name>, I<var-ref>
+=item B<settable_boolean> I<name>, I<var-ref>, [I<validate-ref>]
 
 This adds a /settable boolean called I<name>.  I<var-ref> is a reference
 to the scalar which will store the value.
 
+I<validate-ref>, if provided, will be called to validate a new value is
+legal.  It will receive both the I<name> and the new value (as a boolean,
+not as the user typed it) as arguments.  It should return a boolean to
+indicate whether the value is okay.
+
 =cut
 
 sub settable_boolean {
-    my ($name, $rvar) = @_;
+    my ($name, $rvar, $rvalidate) = @_;
     my $closure = sub {
 	my ($rvar, $name, $val) = @_;
+	my $new = $$rvar;
 	my $lval = lc $val;
 	if ($lval eq 'on') {
-	    $$rvar = 1;
+	    $new = 1;
 	}
 	elsif ($lval eq 'off') {
-	    $$rvar = 0;
+	    $new = 0;
 	}
 	elsif ($lval eq 'toggle') {
-	    $$rvar = !$$rvar;
+	    $new = !$new;
 	}
 	elsif ($lval eq 'nil') {
 	    # do nothing, for initial set
 	}
 	else {
 	    tell_question "Invalid value `$val' for $name";
+	    return;
 	}
+	if ($rvalidate && !$rvalidate->($name, $new)) {
+	    tell_question "Invalid value `$val' for $name";
+	    return;
+	}
+	$$rvar = $new;
 	$::set{$name} = $$rvar ? 'on' : 'off';
     };
     settable $name, $rvar, $closure;
@@ -669,7 +792,7 @@ sub settable_boolean {
 This function adds a /settable integer called I<name>.  I<var-ref> is a
 reference to the scalar which will store the value.
 
-I<validate-ref>, if provided, will be called to validate the a new
+I<validate-ref>, if provided, will be called to validate a new
 value is legal.  It will receive both the I<name> and the new value as
 arguments.  Before it is called the new value will have been vetted for
 number-hood.  It should return a boolean to indicate whether the value
@@ -681,7 +804,11 @@ sub settable_int {
     my ($name, $rvar, $rvalidate) = @_;
     my $closure = sub {
 	my ($rvar, $name, $val) = @_;
-	if ($val !~ /^-?\d+$/ || ($rvalidate && !$rvalidate->($name, $val))) {
+	if (!defined $val) {
+	    tell_question "Can't set $name to undefined value";
+	}
+	elsif ($val !~ /^-?\d+$/
+		|| ($rvalidate && !$rvalidate->($name, $val))) {
 	    tell_question "Invalid value `$val' for $name";
 	}
 	else {
@@ -690,6 +817,37 @@ sub settable_int {
     };
     settable $name, $rvar, $closure;
     $$rvar ||= 0;	# must be defined for /set to work
+    $::set{uc $name} = $$rvar;
+}
+
+=item B<settable_str> I<name>, I<var-ref>, [I<validate-ref>]
+
+This function adds a /settable called I<name>.  I<var-ref> is a reference
+to the scalar which will store the value.
+
+I<validate-ref>, if provided, will be called to validate the a new
+value is legal.  It will receive both the I<name> and the new value as
+arguments.  It should return a boolean to indicate whether the value is
+okay.
+
+=cut
+
+sub settable_str {
+    my ($name, $rvar, $rvalidate) = @_;
+    my $closure = sub {
+	my ($rvar, $name, $val) = @_;
+	if (!defined $val) {
+	    tell_question "Can't set $name to undefined value";
+	}
+	elsif ($rvalidate && !$rvalidate->($name, $val)) {
+	    tell_question "Invalid value `$val' for $name";
+	}
+	else {
+	    $$rvar = $::set{$name} = $val;
+	}
+    };
+    settable $name, $rvar, $closure;
+    $$rvar ||= '';	# must be defined for /set to work
     $::set{uc $name} = $$rvar;
 }
 
@@ -751,7 +909,7 @@ This creates a new hook called I<name>.
 
 sub add_hook_type {
     unless (@_ == 1) {
-	arg_count_error 'add_hook_type', 1, @_;
+	arg_count_error undef, 1, @_;
 	return;
     }
     my ($hook) = @_;
@@ -774,7 +932,7 @@ code reference.
 
 sub add_hook {
     unless (@_ == 2) {
-	arg_count_error 'add_hook', 2, @_;
+	arg_count_error undef, 2, @_;
 	return;
     }
     my ($hook, $code) = @_;
@@ -794,7 +952,7 @@ Run the I<name> hook, passing the I<arg>s to each hook member via @_.
 
 sub run_hook {
     unless (@_ >= 1) {
-	arg_count_error 'run_hook', '1 or more', @_;
+	arg_count_error undef, '1 or more', @_;
 	return;
     }
     my ($hook, @arg) = @_;

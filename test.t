@@ -1,7 +1,7 @@
 #!perl -w
 use strict;
 
-# $Id: test.t,v 1.5 2000-06-02 12:54:08-04 roderick Exp $
+# $Id: test.t,v 1.6 2000-07-27 12:01:18-04 roderick Exp $
 #
 # Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
 # This program is free software; you can redistribute it and/or modify
@@ -18,6 +18,7 @@ use Sirc::Kick ();
 use Sirc::LckHash ();
 use Sirc::LimitMan ();
 use Sirc::Util;
+use Sirc::URL;
 
 sub test {
     my ($n, $result, @info) = @_;

@@ -1,14 +1,15 @@
-# $Id: LimitMan.pm,v 1.3 2000-06-02 15:42:49-04 roderick Exp $
+# $Id: LimitMan.pm,v 1.6 2000-07-27 12:04:46-04 roderick Exp $
 #
 # Copyright (c) 2000 Roderick Schertler.  All rights reserved.  This
 # program is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
+#
+# Documentation is at the __END__.
 
 use strict;
 
 package Sirc::LimitMan;
 
-use Exporter		();
 use Sirc::Chantrack	qw(%Chan_limit %Chan_user);
 use Sirc::LckHash	();
 use Sirc::Util		qw(addcmd add_hook arg_count_error by_server deltimer
@@ -17,14 +18,10 @@ use Sirc::Util		qw(addcmd add_hook arg_count_error by_server deltimer
 			    tell_error tell_question timer
 			    xtell);
 
-use vars qw($VERSION @ISA @EXPORT @EXPORT_OK);
+use vars qw($VERSION);
 
-$VERSION  = do{my@r=q$Revision: 1.3 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+$VERSION  = do{my@r=q$Revision: 1.6 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
 $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
-
-@ISA		= qw(Exporter);
-@EXPORT		= qw();
-@EXPORT_OK	= qw();
 
 # These variables are tied to /set options.  XXX Allow setting these
 # per-channel.
@@ -81,7 +78,7 @@ sub am_master {
 
 sub set_timer {
     unless (@_ == 2) {
-	arg_count_error __PACKAGE__ . '::set_timer', 2, @_;
+	arg_count_error undef, 2, @_;
 	return;
     }
     my ($c, $type) = @_;
