@@ -1,8 +1,8 @@
-# $Id: Chantrack.pm,v 1.10 1999-05-25 11:07:55-04 roderick Exp $
+# $Id: Chantrack.pm,v 1.12 2000-06-02 13:17:00-04 roderick Exp $
 #
-# Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
-# program is free software; you can redistribute it and/or modify it
-# under the same terms as Perl itself.
+# Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
+# This program is free software; you can redistribute it and/or modify
+# it under the same terms as Perl itself.
 #
 # Documentation is at the __END__.
 
@@ -18,23 +18,26 @@ package Sirc::Chantrack;
 
 use Sirc::LckHash ();
 use Sirc::Util qw(add_hook_type addhook arg_count_error eval_verbose ieq
-		    plausible_nick run_hook sl tell_error tell_question xtell);
+		    plausible_nick run_hook sl tell_error tell_question
+		    xtell);
 use Exporter ();
 
-use vars qw($VERSION @ISA @EXPORT_OK %Channel %Chan_op %Chan_user %Chan_voice
+use vars qw($VERSION @ISA @EXPORT_OK
+	    %Channel %Chan_limit %Chan_op %Chan_user %Chan_voice
 	    %Nick @Pend_userhost %User_chan %Userhost $Debug $Pkg);
 
-$VERSION  = do{my@r=q$Revision: 1.10 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+$VERSION  = do{my@r=q$Revision: 1.12 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
 $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
 @ISA		= qw(Exporter);
-@EXPORT_OK	= qw(%Channel %Chan_op %Chan_user %Chan_voice %Nick %User_chan
-			chantrack_check chantrack_show);
+@EXPORT_OK	= qw(%Channel %Chan_limit %Chan_op %Chan_user %Chan_voice
+			%Nick %User_chan chantrack_check chantrack_show);
 
 $Debug		= 0;
 $Pkg		= __PACKAGE__;
 
 tie %Channel	=> 'Sirc::LckHash';
+tie %Chan_limit	=> 'Sirc::LckHash';
 tie %Chan_op	=> 'Sirc::LckHash';
 tie %Chan_user	=> 'Sirc::LckHash';
 tie %Chan_voice	=> 'Sirc::LckHash';
@@ -47,6 +50,7 @@ add_hook_type '-op';
 add_hook_type '+voice';
 add_hook_type '-voice';
 add_hook_type 'drop-user';
+add_hook_type 'limit';
 
 my $Old_w;
 BEGIN { $Old_w = $^W; $^W = 1 }
@@ -75,6 +79,8 @@ sub add_user_channel {
     debug "$reason add $n to $c uh $uh";
     if (ieq $n, $::nick) {
 	$Channel{$c} = 1;
+	$Chan_limit{$c} = $::limit{lc $c}
+	    if exists $::limit{lc $c};
 	tie %{ $Chan_user{$c} }, 'Sirc::LckHash';
 	tie %{ $Chan_op{$c} }, 'Sirc::LckHash';
 	tie %{ $Chan_voice{$c} }, 'Sirc::LckHash';
@@ -99,7 +105,7 @@ sub drop_user {
 
     if (ieq $n, $::nick) {
 	debug "$reason drop everything";
-	%Channel = %Chan_user = %Chan_op = %Chan_voice
+	%Channel = %Chan_limit = %Chan_user = %Chan_op = %Chan_voice
 	    = %Nick = %Userhost = %User_chan = ();
     }
     else {
@@ -146,6 +152,7 @@ sub drop_user_channel {
 	    drop_user_channel("self-$reason", $tn, $c);
 	}
 	delete $Channel{$c};
+	delete $Chan_limit{$c};
 	delete $Chan_user{$c};
 	delete $Chan_op{$c};
 	delete $Chan_voice{$c};
@@ -215,7 +222,12 @@ sub main::hook_chantrack_mode {
 	    $add = ($char eq '+');
 	}
 	my $type = $2;
-	my $arg = ($type =~ /[bklov]/ ? shift(@arg) : '');
+	my $arg =
+	    ($type eq 'l' && $add)
+		? shift(@arg)
+		: $type =~ /[bkov]/
+		    ? shift(@arg)
+		    : '';
 
 	debug "mode $char$type arg $arg";
 
@@ -245,9 +257,26 @@ sub main::hook_chantrack_mode {
 	    }
 	}
 
+	elsif ($type eq 'l') {
+	    my $old = $Chan_limit{$chan};
+	    if ($add) {
+		$Chan_limit{$chan} = $arg;
+	    }
+	    else {
+		delete $Chan_limit{$chan};
+	    }
+	    run_hook 'limit', $chan, $old, $Chan_limit{$chan};
+	}
     }
 }
 addhook 'mode', 'chantrack_mode';
+
+sub main::hook_chantrack_324 {
+    # You can't use getarg here or you screw the handling sirc itself does.
+    my ($n, $c) = split ' ', $::args, 2;
+    main::hook_chantrack_mode $c, $::args;
+}
+addhook '324', 'chantrack_324';
 
 sub interpret_names_flag {
     unless (@_ == 3) {
@@ -426,7 +455,8 @@ sub chantrack_check {
 
     require Data::Dumper;
     my (@n, @v);
-    @n = qw(Channel Chan_op Chan_user Chan_voice Nick Userhost User_chan);
+    @n = qw(Channel Chan_limit Chan_op Chan_user Chan_voice
+	    Nick Userhost User_chan);
     for (@n) {
 	no strict 'refs';
 	push @v, \%$_;
@@ -449,6 +479,7 @@ Sirc::Chantrack - Track information about the channels you're on
     $Channel{$chan}		# true if you're on $channel
 
     # These only work for channels you are on:
+    $Chan_limit{$chan}		# channel limit, or non-existent
     $Chan_user{$chan}{$who}	# true if $who is on $channel
     $Chan_op{$chan}{$who}	# true if $who is an op on $channel
     $Chan_voice{$chan}{$who}	# true if $who has a voice op on $channel
@@ -468,6 +499,7 @@ Sirc::Chantrack - Track information about the channels you're on
     -op		ditto
     +voice	gets ($channel, $nick), $who is originator
     -voice	ditto
+    limit	gets ($channel, $old_limit, $new_limit), $who is originator
 
 =head1 DESCRIPTION
 
@@ -551,6 +583,12 @@ activates when you are given ops:
 	timer 10, qq{ main::cmd_autoop "\Q$c\E" }
 	    if ieq $n, $::nick;
     };
+
+=item B<limit> hook
+
+This is a Sirc::Util-style hook for channel limit changes.  It gets as
+args the channel name, the old limit, and the new limit.  $::who contains
+the originator.
 
 =back
 

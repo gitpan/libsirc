@@ -1,8 +1,8 @@
-# $Id: Makefile.PL,v 1.6 1999-01-08 17:47:32-05 roderick Exp $
+# $Id: Makefile.PL,v 1.7 2000-06-02 12:52:18-04 roderick Exp $
 #
-# Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
-# program is free software; you can redistribute it and/or modify it
-# under the same terms as Perl itself.
+# Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
+# This program is free software; you can redistribute it and/or modify
+# it under the same terms as Perl itself.
 
 use ExtUtils::MakeMaker;
 

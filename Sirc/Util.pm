@@ -1,8 +1,8 @@
-# $Id: Util.pm,v 1.9 1999-05-25 11:10:02-04 roderick Exp $
+# $Id: Util.pm,v 1.12 2000-06-02 15:39:57-04 roderick Exp $
 #
-# Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
-# program is free software; you can redistribute it and/or modify it
-# under the same terms as Perl itself.
+# Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
+# This program is free software; you can redistribute it and/or modify
+# it under the same terms as Perl itself.
 
 use strict;
 
@@ -27,17 +27,19 @@ Sirc::Util - Utility sirc functions
 
     # miscellaneous
     $pattern = ban_pattern $nick, $user, $host;
+    $boolean = by_server [$who, $user, $host];
     eval_this $code, [@arg];
     eval_verbose $name, code$, [@arg];
-    have_ops $channel;
-    have_ops_q $channel;
-    ieq $a, $b;
+    $boolean = have_ops $channel;
+    $boolean = have_ops_q $channel;
+    $boolean = ieq $a, $b;
     $re = mask_to_re $mask;
-    optional_channel;
-    plausible_channel $channel;
-    plausible_nick $nick;
-    xgetarg;
-    xrestrict;
+    $unused_timer = newtimer;
+    optional_channel or return;
+    $boolean = plausible_channel $channel;
+    $boolean = plausible_nick $nick;
+    $arg = xgetarg;
+    $restricted = xrestrict;
 
     # /settables
     settable name, $var_ref, $validate_ref;
@@ -80,21 +82,21 @@ BEGIN {
 BEGIN {
     # This first line is for MakeMaker, it extracts the version for the
     # whole distribution from here.
-    $VERSION = '0.09';
+    $VERSION = '0.11';
     $VERSION .= '-l' if 0;
     $::add_ons .= "+libsirc $VERSION"
 	if !defined $::add_ons || $::add_ons !~ /\blibsirc\b/;
 
     # This is the real version for this file.
-    $VERSION  = do{my@r=q$Revision: 1.9 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+    $VERSION  = do{my@r=q$Revision: 1.12 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
     $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
     @ISA	= qw(Exporter);
     @EXPORT_OK	= qw(
 		     	arg_count_error tell_error tell_question xtell
 
-			ban_pattern eval_this eval_verbose have_ops
-			have_ops_q ieq mask_to_re optional_channel
+			ban_pattern by_server eval_this eval_verbose have_ops
+			have_ops_q ieq mask_to_re newtimer optional_channel
 			plausible_channel plausible_nick xgetarg
 			xrestrict
 
@@ -296,6 +298,25 @@ sub ban_pattern {
     return "$n!$u\@$h";
 }
 
+=item by_server [I<who>, I<user>, I<host>]
+
+If the given I<who>, I<user>, I<host> corresponds to a server rather
+than a user, return the server name, else return undef.  If these aren't
+specified the global $::who, $::user, and $::host are used, which is
+what you usually want anyway.
+
+=cut
+
+sub by_server {
+    unless (@_ == 0 || @_ == 3) {
+	arg_count_error 'by_server', '0 or 3', @_;
+	return;
+    }
+    my ($n, $u, $h) = @_ ? @_ : ($::who, $::user, $::host);
+
+    return $u eq '' ? $n : undef;
+}
+
 =item B<eval_this> I<code>, [I<arg>...]
 
 This B<eval>s I<code> with I<arg> as arguments.  The I<code> can be
@@ -349,11 +370,9 @@ sub eval_verbose {
 =item B<have_ops> I<channel>
 
 This function returns true if you have ops on the specified channel.  If
-you don't have ops it prints an error message and returns false.
+you don\'t have ops it prints an error message and returns false.
 
 =cut
-
-#';
 
 sub have_ops {
     unless (@_ == 1) {
@@ -457,6 +476,24 @@ sub optional_channel {
 	$::args = ($::talkchannel || '#not-on-a-channel') . " $::args";
     }
     return $ret;
+}
+
+=item B<newtimer>
+
+Return an unused timer number.
+
+=cut
+
+sub newtimer {
+    unless (@_ == 0) {
+	arg_count_error 'newtimer', 1, @_;
+	return;
+    }
+
+    while (1) {
+	my $n = 1 + int rand 2**31;
+	return $n unless grep { $_ == $n } @::trefs;
+    }
 }
 
 =item B<plausible_channel> I<channel>

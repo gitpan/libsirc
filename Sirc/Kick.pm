@@ -1,8 +1,8 @@
-# $Id: Kick.pm,v 1.3 1999-05-03 22:30:39-04 roderick Exp $
+# $Id: Kick.pm,v 1.4 2000-06-02 12:53:10-04 roderick Exp $
 #
-# Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
-# program is free software; you can redistribute it and/or modify it
-# under the same terms as Perl itself.
+# Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
+# This program is free software; you can redistribute it and/or modify
+# it under the same terms as Perl itself.
 
 use strict;
 
@@ -16,7 +16,7 @@ use Sirc::Util		qw(addcmd arg_count_error ban_pattern docommand
 use vars qw($VERSION @ISA @EXPORT_OK $Debug);
 
 BEGIN {
-    $VERSION  = do{my@r=q$Revision: 1.3 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+    $VERSION  = do{my@r=q$Revision: 1.4 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
     $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
     # ban_pattern() is exportable because it used to live here.

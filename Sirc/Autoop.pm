@@ -1,8 +1,8 @@
-# $Id: Autoop.pm,v 1.9 1999-05-25 11:04:33-04 roderick Exp $
+# $Id: Autoop.pm,v 1.10 2000-06-02 12:52:49-04 roderick Exp $
 #
-# Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
-# program is free software; you can redistribute it and/or modify it
-# under the same terms as Perl itself.
+# Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
+# This program is free software; you can redistribute it and/or modify
+# it under the same terms as Perl itself.
 
 # XXX
 #    - track nick changes
@@ -22,7 +22,7 @@ use Sirc::Util		qw(addcmd add_hook addhook ban_pattern docommand
 
 use vars qw($VERSION @ISA @EXPORT @EXPORT_OK @Autoop %Autovoice);
 
-$VERSION  = do{my@r=q$Revision: 1.9 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
+$VERSION  = do{my@r=q$Revision: 1.10 $=~/\d+/g;sprintf '%d.'.'%03d'x$#r,@r};
 $VERSION .= '-l' if q$Locker:  $ =~ /: \S/;
 
 @ISA		= qw(Exporter);

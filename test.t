@@ -1,11 +1,11 @@
 #!perl -w
 use strict;
 
-# $Id: test.t,v 1.4 1999-01-08 18:05:40-05 roderick Exp $
+# $Id: test.t,v 1.5 2000-06-02 12:54:08-04 roderick Exp $
 #
-# Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
-# program is free software; you can redistribute it and/or modify it
-# under the same terms as Perl itself.
+# Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
+# This program is free software; you can redistribute it and/or modify
+# it under the same terms as Perl itself.
 
 BEGIN {
     $| = 1;
@@ -16,6 +16,7 @@ use Sirc::Autoop ();
 use Sirc::Chantrack ();
 use Sirc::Kick ();
 use Sirc::LckHash ();
+use Sirc::LimitMan ();
 use Sirc::Util;
 
 sub test {

@@ -1,8 +1,8 @@
-# $Id: LckHash.pm,v 1.2 1999-05-25 11:09:17-04 roderick Exp $
+# $Id: LckHash.pm,v 1.3 2000-06-02 12:53:37-04 roderick Exp $
 #
-# Copyright (c) 1997 Roderick Schertler.  All rights reserved.  This
-# program is free software; you can redistribute it and/or modify it
-# under the same terms as Perl itself.
+# Copyright (c) 1997-2000 Roderick Schertler.  All rights reserved.
+# This program is free software; you can redistribute it and/or modify
+# it under the same terms as Perl itself.
 
 use strict;
 
